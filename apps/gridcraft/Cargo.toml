@@ -31,7 +31,6 @@ winit = { version = "0.30", default-features = false, features = ["x11"] }
 # Same craft-libs revision as the workspace's craft-update and craft-window (see the root
 # Cargo.toml).
 craft-print = { git = "https://github.com/storytold/craft-libs", rev = "b926b5c03e256c86ca10934f58d03f628810b5b7" }
-craft-update = { workspace = true }
 rfd = { workspace = true }
 arboard = { workspace = true }
 gridcraft-mcp = { workspace = true }

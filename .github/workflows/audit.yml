@@ -1,0 +1,49 @@
+name: Security audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust and cargo-audit
+        run: |
+          rustup update stable --no-self-update
+          cargo install cargo-audit --locked
+      - name: cargo audit (RUSTSEC advisories)
+        continue-on-error: true
+        run: cargo audit
+      - name: Crates that pull in networking for the Windows build
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          foreach ($c in 'ureq','reqwest','hyper','rustls','craft-update','sigstore-verify','tokio','native-tls') {
+            Write-Output "=== cargo tree -i $c ==="
+            cargo tree -i $c -e normal --target x86_64-pc-windows-msvc -p gridcraft 2>&1 | Where-Object { $_ -notmatch '^warning: patch|^help:|^\s+(with|what|version)' } | Select-Object -First 15
+          }
+  exe-imports:
+    runs-on: windows-latest
+    steps:
+      - name: Imports and embedded URLs of the latest released exe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R ${{ github.repository }} -p '*.zip'
+          Expand-Archive gridcraft-portable-windows-x64.zip -DestinationPath rel
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = (Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe | Where-Object { $_.FullName -like '*Hostx64*x64*' } | Select-Object -First 1).FullName
+          foreach ($exe in 'gridcraft.exe','gridcraft-cli.exe') {
+            Write-Output "=== DLL dependencies: $exe ==="
+            & $dumpbin /dependents "rel/gridcraft-portable/$exe"
+            Write-Output "=== network-related imports: $exe ==="
+            & $dumpbin /imports "rel/gridcraft-portable/$exe" | Select-String -Pattern 'ws2_32|winhttp|wininet|urlmon|dnsapi|iphlpapi|WSAStartup|getaddrinfo|InternetOpen|WinHttp|connect'
+          }
+          Write-Output "=== URLs embedded in gridcraft.exe ==="
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes("rel/gridcraft-portable/gridcraft.exe"))
+          [regex]::Matches($text, 'https?://[A-Za-z0-9._~:/?#@!$&''()*+,;=%-]{4,120}') | ForEach-Object { $_.Value } | Sort-Object -Unique | Where-Object { $_ -notmatch 'w3\.org|schemas\.|microsoft\.com|openxmlformats|purl\.org|apache\.org|unicode\.org|example\.' }
