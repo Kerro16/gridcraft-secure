@@ -10,7 +10,7 @@ jobs:
   cargo-audit:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Rust and cargo-audit
         run: |
           rustup update stable --no-self-update
